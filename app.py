@@ -2,7 +2,7 @@ import os
 import subprocess
 from urllib.parse import urlparse
 
-from flask import Flask, render_template_string, request
+from flask import Flask, Response, render_template_string, request
 
 app = Flask(__name__)
 
@@ -13,31 +13,154 @@ INDEX_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neon DB Migration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; margin: 2em; background-color: #f4f4f4; color: #333; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h1 { color: #007bff; }
-        textarea { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 1em; border-radius: 4px; border: 1px solid #ddd; }
-        input[type="submit"] { background: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-        input[type="submit"]:hover { background: #0056b3; }
-        pre { background: #eee; padding: 1em; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; }
+        :root {
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --background-color: #f8f9fa;
+            --container-bg: #ffffff;
+            --text-color: #343a40;
+            --border-color: #dee2e6;
+            --output-bg: #f1f3f5;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2em;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--container-bg);
+            padding: 2.5em;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 1.5em;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5em;
+        }
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        input[type="submit"] {
+            background: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        input[type="submit"]:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+        input[type="submit"]:disabled {
+            background-color: #a0c3ff;
+            cursor: not-allowed;
+        }
+        #output-container {
+            margin-top: 2em;
+            text-align: left;
+            display: none;
+        }
+        pre {
+            background: var(--output-bg);
+            padding: 1.5em;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Neon PostgreSQL Database Migration</h1>
-        <form method="post">
-            <label for="source">Source Connection String:</label><br>
-            <textarea id="source" name="source" rows="3" required></textarea><br>
-            <label for="target">Target Connection String:</label><br>
-            <textarea id="target" name="target" rows="3" required></textarea><br>
+        <form>
+            <div>
+                <label for="source" style="display: block; text-align: left; margin-bottom: 0.5em;">Source Connection String:</label>
+                <textarea id="source" name="source" rows="3" required></textarea>
+            </div>
+            <div>
+                <label for="target" style="display: block; text-align: left; margin-bottom: 0.5em;">Target Connection String:</label>
+                <textarea id="target" name="target" rows="3" required></textarea>
+            </div>
             <input type="submit" value="Migrate Database">
         </form>
-        {% if output %}
-        <h2>Output:</h2>
-        <pre>{{ output }}</pre>
-        {% endif %}
+        <div id="output-container">
+            <h2>Output:</h2>
+            <pre id="output"></pre>
+        </div>
     </div>
+    <script>
+        const form = document.querySelector('form');
+        const outputEl = document.getElementById('output');
+        const outputContainer = document.getElementById('output-container');
+        const submitButton = form.querySelector('input[type="submit"]');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            outputEl.innerHTML = '';
+            outputContainer.style.display = 'block';
+            submitButton.disabled = true;
+            submitButton.value = 'Migrating...';
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/migrate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    outputEl.innerHTML += chunk;
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                }
+            } catch (error) {
+                outputEl.innerHTML += `\\n--- Frontend Error ---\\nAn error occurred: ${error}`;
+            } finally {
+                submitButton.disabled = false;
+                submitButton.value = 'Migrate Database';
+            }
+        });
+    </script>
 </body>
 </html>
 """
@@ -53,20 +176,24 @@ def parse_db_string(db_string):
     }
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def index():
-    output = None
-    if request.method == "POST":
-        source_conn_str = request.form["source"]
-        target_conn_str = request.form["target"]
+    return render_template_string(INDEX_HTML)
 
-        source_db = parse_db_string(source_conn_str)
-        target_db = parse_db_string(target_conn_str)
 
-        backup_file = "neon_backup.dump"
-        output_log = []
+@app.route("/migrate", methods=["POST"])
+def migrate():
+    source_conn_str = request.form["source"]
+    target_conn_str = request.form["target"]
 
+    source_db = parse_db_string(source_conn_str)
+    target_db = parse_db_string(target_conn_str)
+
+    backup_file = "neon_backup.dump"
+
+    def generate():
         try:
+            # pg_dump
             dump_env = os.environ.copy()
             if source_db.get("password"):
                 dump_env["PGPASSWORD"] = source_db["password"]
@@ -85,23 +212,28 @@ def index():
                 backup_file,
                 "--no-owner",
             ]
-            output_log.append(f"Running pg_dump...\n$ {' '.join(dump_command)}\n")
+            yield f"Running pg_dump...\n$ {' '.join(dump_command)}\n\n"
 
-            dump_result = subprocess.run(
-                dump_command, env=dump_env, capture_output=True, text=True, check=False
+            dump_process = subprocess.Popen(
+                dump_command,
+                env=dump_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
             )
-            output_log.append(dump_result.stdout)
-            output_log.append(dump_result.stderr)
+            for line in dump_process.stdout:
+                yield line
+            dump_process.wait()
 
-            if dump_result.returncode != 0:
-                output_log.append("\npg_dump failed. Aborting migration.")
-                raise Exception("pg_dump failed")
+            if dump_process.returncode != 0:
+                yield "\npg_dump failed. Aborting migration."
+                return
 
-            output_log.append("\npg_dump completed successfully.\n")
+            yield "\npg_dump completed successfully.\n\n"
 
-            output_log.append(
-                "\nEnsuring 'public' schema exists in target database...\n"
-            )
+            # Create Schema
             psql_env = os.environ.copy()
             if target_db.get("password"):
                 psql_env["PGPASSWORD"] = target_db["password"]
@@ -117,26 +249,27 @@ def index():
                 "-c",
                 "CREATE SCHEMA IF NOT EXISTS public;",
             ]
-            output_log.append(f"$ {' '.join(create_schema_command)}\n")
+            yield f"Ensuring 'public' schema exists in target database...\n$ {' '.join(create_schema_command)}\n\n"
 
-            create_schema_result = subprocess.run(
+            create_schema_process = subprocess.Popen(
                 create_schema_command,
                 env=psql_env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                check=False,
+                bufsize=1,
+                universal_newlines=True,
             )
+            for line in create_schema_process.stdout:
+                yield line
+            create_schema_process.wait()
 
-            output_log.append(create_schema_result.stdout)
-            output_log.append(create_schema_result.stderr)
-
-            if create_schema_result.returncode != 0:
-                output_log.append(
-                    "\nWarning: Command to create schema failed. This may be okay if it already exists and permissions are restricted.\n"
-                )
+            if create_schema_process.returncode != 0:
+                yield "\nWarning: Command to create schema failed, but continuing.\n\n"
             else:
-                output_log.append("Schema 'public' check/creation complete.\n")
+                yield "Schema 'public' check/creation complete.\n\n"
 
+            # pg_restore
             restore_env = os.environ.copy()
             if target_db.get("password"):
                 restore_env["PGPASSWORD"] = target_db["password"]
@@ -158,37 +291,33 @@ def index():
                 "c",
                 backup_file,
             ]
-            output_log.append(
-                f"\nRunning pg_restore...\n$ {' '.join(restore_command)}\n"
-            )
+            yield f"Running pg_restore...\n$ {' '.join(restore_command)}\n\n"
 
-            restore_result = subprocess.run(
+            restore_process = subprocess.Popen(
                 restore_command,
                 env=restore_env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                check=False,
+                bufsize=1,
+                universal_newlines=True,
             )
-            output_log.append(restore_result.stdout)
-            output_log.append(restore_result.stderr)
+            for line in restore_process.stdout:
+                yield line
+            restore_process.wait()
 
-            if restore_result.returncode != 0:
-                output_log.append(
-                    "\npg_restore finished with errors (this is often acceptable for Neon migrations)."
-                )
+            if restore_process.returncode != 0:
+                yield "\npg_restore finished with warnings (this is often acceptable for Neon migrations)."
             else:
-                output_log.append("\npg_restore completed successfully.")
+                yield "\npg_restore completed successfully."
 
         except Exception as e:
-            if "pg_dump failed" not in str(e):
-                output_log.append(f"\nAn unhandled error occurred: {e}")
+            yield f"\nAn unhandled error occurred: {e}"
         finally:
             if os.path.exists(backup_file):
                 os.remove(backup_file)
 
-        output = "\n".join(output_log)
-
-    return render_template_string(INDEX_HTML, output=output)
+    return Response(generate(), mimetype="text/plain")
 
 
 if __name__ == "__main__":
