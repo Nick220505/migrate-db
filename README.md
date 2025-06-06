@@ -1,49 +1,25 @@
-# Extractor de Esquema y Datos de PostgreSQL a SQL
+# Neon DB Migration Tool
 
-Este programa permite extraer el esquema completo y datos de una base de datos PostgreSQL (Neon) y generar scripts SQL para recrear la base de datos. El programa genera:
+This web application provides a simple interface to migrate a Neon PostgreSQL database from a source to a target using `pg_dump` and `pg_restore`.
 
-- Scripts SQL para crear tablas, secuencias y restricciones
-- Scripts SQL para insertar los datos existentes
-- Información detallada sobre la estructura de la base de datos
+## How to use
 
-## Requisitos
+### Prerequisites
 
-Instala las dependencias necesarias con:
+- Docker
+- Docker Compose
 
-```
-pip install -r requirements.txt
-```
+### Running the application
 
-## Uso
+1.  Clone this repository or save the files in a directory.
+2.  Open a terminal in the project's root directory.
+3.  Run the following command to build and start the application:
+    ```sh
+    docker-compose up
+    ```
+4.  Open your web browser and navigate to [http://localhost:5000](http://localhost:5000).
+5.  Enter the source and target Neon PostgreSQL connection strings into the respective fields.
+6.  Click the "Migrate Database" button.
+7.  The output of the migration process will be displayed on the page.
 
-El script ya tiene configurada la cadena de conexión a la base de datos Neon:
-
-```python
-connection_string = "postgresql://neondb_owner:npg_oSnbAJiw3Wz8@ep-curly-moon-a4xh55ke-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require"
-```
-
-Para ejecutar el programa:
-
-```
-python extract_db_schema.py
-```
-
-## Salida
-
-El programa genera los siguientes resultados:
-
-1. Información en consola sobre cada tabla, incluyendo:
-   - Esquema (columnas, tipos de datos, etc.)
-   - Claves primarias
-   - Claves foráneas
-   - Datos de muestra (primeras 10 filas)
-
-2. Archivos SQL en la carpeta `sql_export`:
-   - `01_schema.sql` - Contiene las instrucciones CREATE para secuencias y tablas
-   - `02_foreign_keys.sql` - Contiene las instrucciones ALTER TABLE para claves foráneas
-   - `03_data.sql` - Contiene las instrucciones INSERT para los datos de las tablas
-
-## Personalización
-
-- Para exportar todos los datos en lugar de solo muestras, modifica el parámetro `sample_data` a `False` en la llamada a `export_schema_and_data_sql`
-- Para cambiar el directorio de salida, modifica el parámetro `output_dir` en la llamada a `export_schema_and_data_sql` 
+The application will handle creating a backup from the source and restoring it to the target database. 
